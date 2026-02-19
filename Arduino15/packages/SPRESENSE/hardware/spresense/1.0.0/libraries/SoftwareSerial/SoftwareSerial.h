@@ -54,10 +54,19 @@
 class SoftwareSerial : public Stream
 {
 private:
+  enum ParityMode
+  {
+    PARITY_NONE = 0,
+    PARITY_EVEN,
+    PARITY_ODD
+  };
+
   uint8_t _receivePin;           /**< Receive pin */
   uint8_t _transmitPin;          /**< Transmit pin */
   uint32_t _receivePinRegAddr;   /**< Receive pin register address */
   uint32_t _transmitPinRegAddr;  /**< Transmit pin register address */
+  uint8_t _stopBits;             /**< Stop bits */
+  ParityMode _parityMode;        /**< Parity mode */
 
   unsigned long _rx_delay_centering;  /**< 4-cycle delays to center the sample (must never be 0!) */
   unsigned long _rx_delay_intrabit;   /**< 4-cycle delays to get next receive bit (must never be 0!) */
@@ -133,6 +142,14 @@ public:
    * @param [in] speed Baud rate. The maximum speed is 250,000 bps.
    */
   void begin(long speed);
+
+  /**
+   * @brief Initialize the serial communication with frame format
+   *
+   * @param [in] speed Baud rate. The maximum speed is 250,000 bps.
+   * @param [in] config Frame format (e.g. SERIAL_8N1, SERIAL_8E1, SERIAL_8O1, SERIAL_8N2)
+   */
+  void begin(long speed, uint16_t config);
 
   /**
    * @brief Deinitialize the serial communication

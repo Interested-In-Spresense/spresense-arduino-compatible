@@ -37,6 +37,10 @@ extern "C" {
 #include "wiring_private.h"
 #include "utility.h"
 
+#define SWSERIAL_CSTOPB  (1 << 6)
+#define SWSERIAL_PARENB  (1 << 8)
+#define SWSERIAL_PARODD  (1 << 9)
+
 /**
  * @brief Active listener.
  */
@@ -183,6 +187,35 @@ void SoftwareSerial::recv()
     tunedDelay(_rx_delay_intrabit);
   }
 
+  if (_parityMode != PARITY_NONE)
+  {
+    uint8_t parity_bit = (getreg32(_receivePinRegAddr) & (1 << GPIO_INPUT_SHIFT)) ? 1 : 0;
+    uint8_t ones = 0;
+
+    for (uint8_t i = 0; i < 8; i++)
+    {
+      ones += ((d >> i) & 0x01);
+    }
+
+    uint8_t expected = (_parityMode == PARITY_ODD ? 1 : 0) ^ (ones & 0x01);
+    if (parity_bit != expected)
+    {
+      return;
+    }
+
+    tunedDelay(_rx_delay_intrabit);
+  }
+
+  if (!(getreg32(_receivePinRegAddr) & (1 << GPIO_INPUT_SHIFT)))
+  {
+    return;
+  }
+
+  if (_stopBits > 1)
+  {
+    tunedDelay(_rx_delay_intrabit);
+  }
+
   uint8_t next = (_receive_buffer_tail + 1) % SS_MAX_RX_BUFF;
   if (next != _receive_buffer_head)
   {
@@ -212,6 +245,8 @@ SoftwareSerial::SoftwareSerial(uint8_t receivePin, uint8_t transmitPin) :
   _rx_delay_centering(0),
   _rx_delay_intrabit(0),
   _tx_delay(0),
+  _stopBits(1),
+  _parityMode(PARITY_NONE),
   _buffer_overflow(false),
   _receive_buffer_tail(0),
   _receive_buffer_head(0)
@@ -229,6 +264,11 @@ SoftwareSerial::~SoftwareSerial()
 
 void SoftwareSerial::begin(long speed)
 {
+  begin(speed, 0);
+}
+
+void SoftwareSerial::begin(long speed, uint16_t config)
+{
   unsigned long bitDelay;
 
   pinMode(_transmitPin, OUTPUT);
@@ -239,6 +279,17 @@ void SoftwareSerial::begin(long speed)
   _tx_delay = bitDelay - 16;
   _rx_delay_centering = bitDelay + (bitDelay / 2) > 160 ? bitDelay + (bitDelay / 2) - 160 : 1;
   _rx_delay_intrabit = bitDelay - 16;
+
+  _stopBits = (config & SWSERIAL_CSTOPB) ? 2 : 1;
+
+  if (config & SWSERIAL_PARENB)
+  {
+    _parityMode = (config & SWSERIAL_PARODD) ? PARITY_ODD : PARITY_EVEN;
+  }
+  else
+  {
+    _parityMode = PARITY_NONE;
+  }
 
   listen();
 }
@@ -289,10 +340,12 @@ size_t SoftwareSerial::write(uint8_t b)
   putreg32(GPIO_OUTPUT_ENABLE | GPIO_OUTPUT_LOW, _transmitPinRegAddr);
   tunedDelay(_tx_delay);
 
-  /* Write each of the 8 bits */
+  uint8_t tx = b;
+
+  /* Write each data bit */
   for (uint8_t i = 8; i > 0; --i)
   {
-    if (b & 1) 
+    if (tx & 1)
     {
       putreg32(GPIO_OUTPUT_ENABLE | GPIO_OUTPUT_HIGH, _transmitPinRegAddr);
     }
@@ -302,13 +355,38 @@ size_t SoftwareSerial::write(uint8_t b)
     }
 
     tunedDelay(_tx_delay);
-    b >>= 1;
+    tx >>= 1;
+  }
+
+  if (_parityMode != PARITY_NONE)
+  {
+    uint8_t ones = 0;
+    for (uint8_t i = 0; i < 8; i++)
+    {
+      ones += ((b >> i) & 0x01);
+    }
+
+    uint8_t parity_bit = (_parityMode == PARITY_ODD ? 1 : 0) ^ (ones & 0x01);
+    if (parity_bit)
+    {
+      putreg32(GPIO_OUTPUT_ENABLE | GPIO_OUTPUT_HIGH, _transmitPinRegAddr);
+    }
+    else
+    {
+      putreg32(GPIO_OUTPUT_ENABLE | GPIO_OUTPUT_LOW, _transmitPinRegAddr);
+    }
+
+    tunedDelay(_tx_delay);
   }
 
   putreg32(GPIO_OUTPUT_ENABLE | GPIO_OUTPUT_HIGH, _transmitPinRegAddr);
 
   interrupts();
   tunedDelay(_tx_delay);
+  if (_stopBits > 1)
+  {
+    tunedDelay(_tx_delay);
+  }
   
   return 1;
 }
