@@ -848,6 +848,9 @@ public:
 
   CAM_DEVICE_TYPE getDeviceType();
 
+  CamErr setExposureMetering(v4l2_exposure_metering mode);
+  CamErr setExposureMeteringSpotPosition(uint16_t x, uint16_t y);
+
   /**
    * @brief De-initialize Spresense Camera
    * @details [en] De-initialize Spresense Camera. This method cancel everything of

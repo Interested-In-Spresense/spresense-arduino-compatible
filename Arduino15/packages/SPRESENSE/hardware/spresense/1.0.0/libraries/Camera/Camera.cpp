@@ -1416,6 +1416,21 @@ void CameraClass::release_buf(ImgBuff *buf)
     }
 }
 
+CamErr CameraClass::setExposureMetering(v4l2_exposure_metering mode)
+{
+  return set_ext_ctrls(V4L2_CTRL_CLASS_CAMERA,
+                       V4L2_CID_EXPOSURE_METERING,
+                       (int32_t)mode);
+}
+
+CamErr CameraClass::setExposureMeteringSpotPosition(uint16_t x, uint16_t y)
+{
+  int32_t pos = ((uint32_t)x << 16) | y;
+
+  return set_ext_ctrls(V4L2_CTRL_CLASS_CAMERA,
+                       V4L2_CID_EXPOSURE_METERING_SPOT_POSITION,
+                       pos);
+}
 
 /** Global instance */
 CameraClass theCamera = CameraClass::getInstance();
